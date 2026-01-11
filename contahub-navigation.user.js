@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Navegação de Turnos (Overlay + Teclado)
+// @name         contahub-Navegação de Turnos (Overlay + Teclado)
 // @namespace    http://tampermonkey.net/
 // @version      4.0
 // @description  Navegação no topo com Data e atalhos de teclado (Setas Esquerda/Direita).
