@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Soma vendas no turno noturno (com madrugada do dia seguinte) para site da Getnet
+// @name         getnet-Soma vendas no turno noturno (com madrugada do dia seguinte) para o site
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  Soma Bruto Aprovado lendo os cards de data (17 Dez, 18 Dez)
