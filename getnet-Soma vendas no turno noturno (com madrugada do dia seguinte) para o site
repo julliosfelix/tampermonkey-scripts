@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         getnet-Soma vendas no turno noturno (com madrugada do dia seguinte) para o site
+// @name         Getnet-Soma vendas no turno noturno (com madrugada do dia seguinte) para o site
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Soma Bruto Aprovado lendo os cards de data (17 Dez, 18 Dez)
+// @version      3.5
+// @description  Soma Bruto Aprovado com Varredura Reforçada e Auto-Scroll
 // @author       Gemini
 // @match        *://minhaconta.getnet.com.br/historico-vendas/*
 // @grant        none
@@ -13,88 +13,85 @@
     let totalCredito = 0;
     let totalDebito = 0;
     let vendasID = new Set();
-    let dataTurnoIniciado = "";
 
     function criarPainel() {
         if (document.getElementById('painel-soma-getnet')) return;
+        const dataOntem = new Date();
+        dataOntem.setDate(dataOntem.getDate() - 1);
+        const diaSugerido = dataOntem.getDate();
+
         const panel = document.createElement('div');
         panel.id = 'painel-soma-getnet';
-        panel.style = "position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); z-index: 9999999; background: #111; color: #fff; padding: 12px 25px; border: 2px solid #e30613; border-radius: 15px 15px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,0.8); font-family: sans-serif; display: flex; gap: 20px; align-items: center;";
+        panel.style = "position: fixed; bottom: 0; right: 20px; z-index: 9999999; background: #111; color: #fff; padding: 10px 20px; border: 2px solid #e30613; border-radius: 15px 15px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,0.8); font-family: sans-serif; display: flex; gap: 15px; align-items: center;";
         panel.innerHTML = `
-            <div style="text-align: center; border-right: 1px solid #444; padding-right: 15px;">
-                <div style="font-size: 9px; color: #ffca00; margin-bottom: 4px;">TURNO INICIADO EM:</div>
-                <div id="data-turno" style="font-size: 11px; font-weight: bold; color: #fff; margin-bottom: 4px;">---</div>
-                <button id="btn-zerar" style="cursor:pointer; background:#444; color:#fff; border:none; font-size:9px; padding:2px 6px; border-radius:3px;">ZERAR CAIXA</button>
+            <div style="text-align: center; border-right: 1px solid #444; padding-right: 10px;">
+                <div style="font-size: 9px; color: #ffca00; margin-bottom: 4px;">DIA INÍCIO TURNO:</div>
+                <input type="number" id="input-dia" value="${diaSugerido}" style="width: 45px; background: #333; color: #fff; border: 1px solid #555; text-align: center; border-radius: 3px; font-weight: bold;">
+                <button id="btn-zerar" style="cursor:pointer; background:#444; color:#fff; border:none; font-size:9px; padding:2px 5px; border-radius:3px; margin-top:4px; display:block; width:100%;">ZERAR TUDO</button>
             </div>
             <div style="text-align: center;">
                 <div style="font-size: 9px; color: #aaa;">CRÉDITO (B)</div>
-                <div id="valor-credito" style="font-size: 22px; font-weight: bold; color: #00d4ff;">R$ 0,00</div>
-                <button id="copy-credito" style="cursor:pointer; background:#333; color:white; border:none; font-size:10px; padding:3px 10px; border-radius:2px;">Copiar</button>
+                <div id="valor-credito" style="font-size: 20px; font-weight: bold; color: #00d4ff;">R$ 0,00</div>
             </div>
-            <div style="text-align: center; border-right: 1px solid #444; padding-right: 20px;">
+            <div style="text-align: center; border-right: 1px solid #444; padding-right: 15px;">
                 <div style="font-size: 9px; color: #aaa;">DÉBITO (C)</div>
-                <div id="valor-debito" style="font-size: 22px; font-weight: bold; color: #00ff00;">R$ 0,00</div>
-                <button id="copy-debito" style="cursor:pointer; background:#333; color:white; border:none; font-size:10px; padding:3px 10px; border-radius:2px;">Copiar</button>
+                <div id="valor-debito" style="font-size: 20px; font-weight: bold; color: #00ff00;">R$ 0,00</div>
             </div>
             <div style="text-align: center;">
-                <button id="btn-calc" style="background:#e30613; color:white; border:none; padding:12px 20px; border-radius:8px; cursor:pointer; font-weight:bold; font-size: 15px;">➕ SOMAR TELA</button>
-                <div id="msg-calc" style="font-size: 10px; color: #ffca00; height: 12px; margin-top: 4px;"></div>
+                <button id="btn-calc" style="background:#e30613; color:white; border:none; padding:10px 15px; border-radius:5px; cursor:pointer; font-weight:bold; font-size: 14px; margin-bottom:5px;">➕ SOMAR TELA</button>
+                <button id="btn-copy-dual" style="background:#008000; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size: 11px; display:block; width:100%;">📋 COPIAR P/ SHEETS</button>
+                <div id="msg-calc" style="font-size: 9px; color: #ffca00; height: 10px; margin-top: 3px;"></div>
             </div>
         `;
         document.body.appendChild(panel);
 
         document.getElementById('btn-calc').onclick = somarVisiveis;
         document.getElementById('btn-zerar').onclick = () => {
-            totalCredito = 0; totalDebito = 0; vendasID.clear(); dataTurnoIniciado = "";
-            document.getElementById('data-turno').innerText = '---';
-            atualizarDisplay();
+            totalCredito = 0; totalDebito = 0; vendasID.clear();
+            document.getElementById('valor-credito').innerText = "R$ 0,00";
+            document.getElementById('valor-debito').innerText = "R$ 0,00";
+            showMsg('msg-calc', 'Caixa Zerado');
         };
-        document.getElementById('copy-debito').onclick = () => copiar('valor-debito');
-        document.getElementById('copy-credito').onclick = () => copiar('valor-credito');
+        document.getElementById('btn-copy-dual').onclick = copiarLadoALado;
     }
 
-    function copiar(id) {
-        navigator.clipboard.writeText(document.getElementById(id).innerText.replace('R$ ', ''));
+    function showMsg(id, texto) {
+        const el = document.getElementById(id);
+        el.innerText = texto;
+        setTimeout(() => { el.innerText = ''; }, 2500);
     }
 
-    function atualizarDisplay() {
-        document.getElementById('valor-debito').innerText = totalDebito.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        document.getElementById('valor-credito').innerText = totalCredito.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    function copiarLadoALado() {
+        const creditoTxt = totalCredito.toFixed(2).replace('.', ',');
+        const debitoTxt = totalDebito.toFixed(2).replace('.', ',');
+        const textoParaCopiar = `${creditoTxt}\t${debitoTxt}`;
+        navigator.clipboard.writeText(textoParaCopiar).then(() => {
+            showMsg('msg-calc', 'Copiado (TAB)');
+        });
     }
 
     function somarVisiveis() {
-        // Detectar a data base através dos cards que você enviou
-        const cards = document.querySelectorAll('.card-custom');
-        let diasNoSite = [];
+        window.scrollTo(0, 0); // Sobe para evitar bugs de renderização
 
-        cards.forEach(card => {
-            const diaElement = card.querySelector('.day');
-            const mesElement = card.querySelector('.month');
-            if (diaElement && mesElement) {
-                const d = parseInt(diaElement.innerText);
-                const mStr = mesElement.innerText.toLowerCase();
-                const m = mStr.includes('dez') ? 11 : 0; // Ajuste para Dezembro (JS meses 0-11)
-                diasNoSite.push({dia: d, mes: m});
-            }
-        });
+        const diaInput = parseInt(document.getElementById('input-dia').value);
+        if (isNaN(diaInput)) { showMsg('msg-calc', 'Informe o dia!'); return; }
 
-        // Se encontrou dias nos cards e ainda não definiu a data do turno
-        if (diasNoSite.length > 0 && dataTurnoIniciado === "") {
-            diasNoSite.sort((a, b) => a.dia - b.dia);
-            dataTurnoIniciado = diasNoSite[0]; // Pega o dia menor
-            document.getElementById('data-turno').innerText = dataTurnoIniciado.dia + "/" + (dataTurnoIniciado.mes + 1);
-        }
+        const agora = new Date();
+        const inicioTurno = new Date(agora.getFullYear(), agora.getMonth(), diaInput, 11, 0);
+        const fimTurno = new Date(agora.getFullYear(), agora.getMonth(), diaInput, 11, 0);
+        fimTurno.setDate(fimTurno.getDate() + 1);
 
-        const linhas = document.querySelectorAll('tr, [role="row"]');
-        let novas = 0;
+        // Busca TODAS as possíveis linhas de venda na tela (inclusive em divs e tabelas)
+        const seletores = ['tr', '[role="row"]', '.vendas-list-item', 'div[class*="list-item"]'];
+        let todasLinhas = [];
+        seletores.forEach(s => todasLinhas.push(...document.querySelectorAll(s)));
 
-        // Intervalo: das 11:00 do dia menor até as 11:00 do dia seguinte
-        const inicioTurno = new Date(2025, dataTurnoIniciado.mes, dataTurnoIniciado.dia, 11, 0);
-        const fimTurno = new Date(2025, dataTurnoIniciado.mes, dataTurnoIniciado.dia + 1, 11, 0);
+        let encontradasNestaVez = 0;
 
-        linhas.forEach(linha => {
+        todasLinhas.forEach(linha => {
             const texto = linha.innerText;
-            if (texto.includes('Aprovada')) {
+            // Filtro rigoroso: Aprovada + Modalidade + Valor
+            if (texto.toLowerCase().includes('aprovada')) {
                 const dataMatch = texto.match(/(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})/);
                 const valores = texto.match(/R\$\s?(\d+\.?\d*,\d{2})/g);
 
@@ -105,25 +102,28 @@
                     const dtVenda = new Date(y, m - 1, d, hh, mm);
 
                     if (dtVenda >= inicioTurno && dtVenda < fimTurno) {
+                        // O valor bruto é o primeiro R$ que aparece na linha
                         const valorBrutoStr = valores[0];
                         const valorNum = parseFloat(valorBrutoStr.replace('R$', '').replace('.', '').replace(',', '.').trim());
-                        const idVenda = data + hora + valorBrutoStr + texto.slice(-15);
+
+                        // Criamos um ID super único (Data + Hora + Valor + Texto da Linha) para evitar pular vendas
+                        const idVenda = data + hora + valorBrutoStr + texto.substring(0, 30);
 
                         if (!vendasID.has(idVenda)) {
-                            if (texto.includes('Débito')) totalDebito += valorNum;
-                            else if (texto.includes('Crédito')) totalCredito += valorNum;
+                            if (texto.toLowerCase().includes('débito')) totalDebito += valorNum;
+                            else if (texto.toLowerCase().includes('crédito')) totalCredito += valorNum;
                             vendasID.add(idVenda);
-                            novas++;
+                            encontradasNestaVez++;
                         }
                     }
                 }
             }
         });
 
-        atualizarDisplay();
-        const msg = document.getElementById('msg-calc');
-        msg.innerText = novas > 0 ? `+${novas} vendas` : 'Sem novas';
-        setTimeout(() => { msg.innerText = ''; }, 2000);
+        document.getElementById('valor-debito').innerText = totalDebito.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        document.getElementById('valor-credito').innerText = totalCredito.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        showMsg('msg-calc', encontradasNestaVez > 0 ? `+${encontradasNestaVez} vendas` : 'Nada novo');
     }
 
     setTimeout(criarPainel, 1500);
