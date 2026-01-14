@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Bees Calculator Pro (V9 Math Fix - Audit)
+// @name         Bees Calculator Pro (V10.1 Combo Audit)
 // @namespace    http://innovfly.com/
-// @version      9.1
-// @description  Calculadora com correção de arredondamento e auditoria de ofertas
-// @author       Innovfly
+// @version      10.1
+// @description  Calculadora com lógica de Combos, auditoria de desconto real e fixação de 24un/cx
+// @author       Innovfly & Gemini Partner
 // @match        *://*.mybees.com.br/*
 // @match        *://*.mercadolivre.com.br/*
 // @grant        GM_setClipboard
@@ -13,10 +13,10 @@
     'use strict';
 
     // --- CONFIGURAÇÃO ---
-    // Coloque sua chave PIX aqui se for distribuir no futuro
-    const CHAVE_PIX = "SUA_CHAVE_PIX_AQUI";
+    const CHAVE_PIX = "SUA_CHAVE_PIX_AQUI"; // Opcional
     const INTERVALO = 1000;
-    const MARGEM_ERRO = 0.05; // Tolerância de 5 centavos para pegar arredondamentos do site
+    const ITENS_POR_CAIXA_FIXO = 24; // Risco assumido pelo usuário para Combos (garrafas por caixa)
+    const MARGEM_ERRO = 0.05; // Tolerância de 5 centavos para detectar preços já calculados pelo site
 
     // --- ESTILOS VISUAIS (CSS) ---
     const style = document.createElement('style');
@@ -24,27 +24,22 @@
         .innovfly-box {
             font-family: 'Segoe UI', Roboto, sans-serif; font-size: 11px;
             color: #333; background: linear-gradient(to bottom, #f1f8e9, #ffffff);
-            /* Borda ajustada para 1px conforme sua preferência */
-            border: 1px solid #8bc34a; border-left: 1px solid #2e7d32;
+            border: 1px solid #8bc34a;
+            border-left: 3px solid #2e7d32;
             border-radius: 4px; padding: 6px 8px; margin-top: 5px;
-            width: fit-content; min-width: 140px;
-            box-shadow: 0 3px 6px rgba(0,0,0,0.1); line-height: 1.4;
+            width: fit-content; min-width: 150px;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+            line-height: 1.4;
             display: flex; flex-direction: column; z-index: 9999;
             animation: innovFadeIn 0.3s ease-out;
         }
         @keyframes innovFadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-        .innov-row { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 3px; }
+        .innov-row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
         .innov-header { border-bottom: 1px dashed #a5d6a7; margin-bottom: 4px; padding-bottom: 2px; color: #2e7d32; font-weight: 700; }
-        .innov-label { color: #555; }
+        .innov-label { color: #666; font-size: 10px; }
         .innov-val { font-weight: 600; color: #1b5e20; }
-
-        /* Estilo do botão (oculto por padrão no HTML, mas mantido no CSS caso precise ativar) */
-        .innov-donate {
-            margin-top: 6px; padding-top: 5px; border-top: 1px solid #eee;
-            text-align: center; cursor: pointer; color: #757575; font-size: 10px; font-weight: 500;
-            transition: all 0.2s;
-        }
-        .innov-donate:hover { color: #2e7d32; background-color: #e8f5e9; border-radius: 2px; }
+        .innov-strike { text-decoration: line-through; color: #999; font-size: 10px; }
+        .innov-discount { color: #e65100; font-weight: bold; }
     `;
     document.head.appendChild(style);
 
@@ -58,7 +53,7 @@
         return parseFloat(clean);
     }
 
-    // Função que verifica se o preço do vizinho bate matematicamente com o nosso cálculo
+    // Função restaurada para evitar poluição visual (ignora preços pequenos que o site já mostra)
     function marcarRedundanciaLocal(container, valorUnitarioCalculado) {
         if (!container) return;
         let possiveisRedundantes = container.querySelectorAll('*');
@@ -73,22 +68,32 @@
             let precoVizinho = parseMoney(texto);
             if (precoVizinho <= 0) return;
 
-            // Lógica Matemática V9: Se a diferença for menor que 5 centavos, é redundante.
-            // Se a diferença for GRANDE (ex: site mostra 5,33 e real é 4,90), ele NÃO entra aqui e exibe a caixa (Audit).
+            // Se o preço vizinho for igual ao nosso unitário calculado (margem de 5 centavos), marcamos como lido
+            // para não gerar uma caixa nova em cima dele.
             if (Math.abs(precoVizinho - valorUnitarioCalculado) < MARGEM_ERRO) {
                  el.setAttribute('data-innov-parsed', 'true');
-            }
+             }
         });
     }
 
-    window.copiarPix = function(e) {
-        e.preventDefault(); e.stopPropagation();
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(CHAVE_PIX)
-                .then(() => alert("✅ Chave PIX copiada!"))
-                .catch(() => prompt("Copie:", CHAVE_PIX));
-        } else { prompt("Copie:", CHAVE_PIX); }
-    };
+    // Busca o maior preço dentro do cartão para usar como "Preço De"
+    function findOldPrice(container, currentPrice) {
+        if (!container) return 0;
+        let text = container.innerText;
+        let moneyMatches = text.match(/R\$\s?[\d\.,]+/g);
+        if (!moneyMatches) return 0;
+
+        let maxPrice = 0;
+        moneyMatches.forEach(m => {
+            let val = parseMoney(m);
+            if (val > maxPrice) maxPrice = val;
+        });
+
+        if (maxPrice > currentPrice * 1.01) {
+            return maxPrice;
+        }
+        return 0;
+    }
 
     function run() {
         let xpath = "//*[contains(text(), 'R$')]";
@@ -96,23 +101,16 @@
 
         for (let i = 0; i < snapshots.snapshotLength; i++) {
             let el = snapshots.snapshotItem(i);
-
             if (el.getAttribute('data-innov-parsed')) continue;
             if (el.closest('.innovfly-box')) continue;
 
-            const style = window.getComputedStyle(el);
-            if (style.textDecorationLine.includes('line-through')) continue;
-
-            // Segurança extra: se tiver barra explícita (/un), ignora
-            if (el.innerText.includes('/')) {
-                el.setAttribute('data-innov-parsed', 'true');
-                continue;
-            }
+            const styleComp = window.getComputedStyle(el);
+            if (styleComp.textDecorationLine.includes('line-through')) continue;
 
             let price = parseMoney(el.innerText);
             if (price <= 0) continue;
 
-            // Busca contexto (Card do Produto)
+            // --- BUSCA CONTEXTO ---
             let tempParent = el.parentElement;
             let containerCard = null;
             let fullText = "";
@@ -122,60 +120,78 @@
                 if (k === 4) containerCard = tempParent;
                 tempParent = tempParent.parentElement;
             }
+            if (!containerCard) containerCard = el.parentElement.parentElement;
             fullText = fullText.toLowerCase().replace(/\n/g, ' ');
 
-            // Extração Qtd
-            let qtd = 1;
-            let mQtd = fullText.match(/(?:c\/|x|cx|caixa|pack|fardo|contém|com)\s?[:]?\s?(\d+)|(\d+)\s?(un|uni|garrafas|latas)/i);
-            if (mQtd) qtd = parseFloat(mQtd[1] || mQtd[2]);
+            // --- LÓGICA DE EXTRAÇÃO ---
+            let qtdCaixas = 1;
+            let isCombo = false;
 
-            // Se for unitário (1 un), pula (a menos que tenha volume, mas focado em caixas)
-            if (qtd <= 1) {
-                if (!fullText.match(/(\d+[\.,]?\d*)\s?(ml|l|kg|g)\b/i)) continue;
+            // 1. Detecta "COMBO N"
+            let mCombo = fullText.match(/combo\s+(\d+)/i);
+            if (mCombo) {
+                qtdCaixas = parseInt(mCombo[1]);
+                isCombo = true;
+            } else {
+                let mQtd = fullText.match(/(?:c\/|x|cx|caixa|pack|fardo|contém|com)\s?[:]?\s?(\d+)|(\d+)\s?(un|uni|garrafas|latas)/i);
+                if (mQtd) {
+                    let found = parseFloat(mQtd[1] || mQtd[2]);
+                    if (found < 50) qtdCaixas = found;
+                }
             }
 
-            // Verifica redundância matemática
-            if (qtd > 1) {
-                let unitarioReal = price / qtd;
+            // --- REDUNDÂNCIA (Restaurada) ---
+            // Se detectamos múltiplas caixas, verificamos se o site já exibe o unitário
+            if (qtdCaixas > 1) {
+                let unitarioReal = price / qtdCaixas;
+                // Se for combo, o "unitário" imediato seria o preço da caixa.
                 if (containerCard) marcarRedundanciaLocal(containerCard, unitarioReal);
             }
 
-            // Extração Volume
-            let vol = 0;
-            let unit = 'L';
-            let volDisplay = '';
-            let mVol = fullText.match(/(\d+[\.,]?\d*)\s?(ml|l|kg|g)\b/i);
-            if (mVol) {
-                let val = parseFloat(mVol[1].replace(',', '.'));
-                let u = mVol[2];
-                if (u === 'ml') { vol = val/1000; unit='L'; volDisplay = val+'ml'; }
-                else if (u === 'l') { vol = val; unit='L'; volDisplay = val+'L'; }
-                else if (u === 'g') { vol = val/1000; unit='kg'; volDisplay = val+'g'; }
-                else if (u === 'kg') { vol = val; unit='kg'; volDisplay = val+'kg'; }
+            if (qtdCaixas <= 1 && !isCombo) {
+                // Pula unitários simples para focar nos combos/packs
+                // A menos que queira adicionar lógica de volume aqui
+                continue;
             }
 
-            if (qtd === 1 && vol === 0) continue;
+            // --- RENDERIZAÇÃO ---
+            let html = `<div class="innov-row innov-header"><span>Oferta:</span><span>R$ ${price.toFixed(2)}</span></div>`;
 
-            // Renderiza HTML
-            let html = `<div class="innov-row innov-header"><span>Base:</span><span>R$ ${price.toFixed(2)}</span></div>`;
-
-            if (qtd > 1) {
+            // Auditoria de Preço Antigo
+            let oldPrice = findOldPrice(containerCard, price);
+            if (oldPrice > 0) {
+                let diff = oldPrice - price;
+                let pct = (diff / oldPrice) * 100;
                 html += `
-                <div class="innov-row"><span class="innov-label">Qtd Pack:</span><span class="innov-val">${qtd} un</span></div>
-                <div class="innov-row"><span class="innov-label">Unidade:</span><span class="innov-val">R$ ${(price/qtd).toFixed(2)}</span></div>
+                <div class="innov-row">
+                    <span class="innov-label">Era (Tabela):</span>
+                    <span class="innov-strike">R$ ${oldPrice.toFixed(2)}</span>
+                </div>
+                <div class="innov-row">
+                    <span class="innov-label">Desc. Real:</span>
+                    <span class="innov-val innov-discount">${pct.toFixed(2)}%</span>
+                </div>
+                <div style="border-bottom: 1px solid #eee; margin: 3px 0;"></div>
                 `;
             }
 
-            if (vol > 0) {
-                let totalVol = vol * qtd;
+            // Exibição Combo vs Normal
+            if (isCombo) {
+                let precoPorCaixa = price / qtdCaixas;
+                let totalGarrafas = qtdCaixas * ITENS_POR_CAIXA_FIXO;
+                let precoPorGarrafa = price / totalGarrafas;
+
                 html += `
-                <div class="innov-row"><span class="innov-label">Vol. Un:</span><span class="innov-val">${volDisplay}</span></div>
-                <div class="innov-row"><span class="innov-label">${unit === 'L' ? 'Litro' : 'Quilo'}:</span><span class="innov-val">R$ ${(price/totalVol).toFixed(2)}</span></div>
+                <div class="innov-row"><span class="innov-label">Cx Combo (${qtdCaixas}):</span><span class="innov-val">R$ ${precoPorCaixa.toFixed(2)}</span></div>
+                <div class="innov-row"><span class="innov-label">Total Garrafas:</span><span class="innov-val">${totalGarrafas} un</span></div>
+                <div class="innov-row"><span class="innov-label">Preço Garrafa:</span><span class="innov-val" style="background:#e8f5e9; padding:0 2px;">R$ ${precoPorGarrafa.toFixed(2)}</span></div>
+                `;
+            } else if (qtdCaixas > 1) {
+                html += `
+                <div class="innov-row"><span class="innov-label">Qtd Pack:</span><span class="innov-val">${qtdCaixas} un</span></div>
+                <div class="innov-row"><span class="innov-label">Unidade:</span><span class="innov-val">R$ ${(price/qtdCaixas).toFixed(2)}</span></div>
                 `;
             }
-
-            // Botão de doação COMENTADO para uso pessoal
-            // html += `<div class="innov-donate" onclick="window.copiarPix(event)">☕ Pagar um café (PIX)</div>`;
 
             let box = document.createElement('div');
             box.className = 'innovfly-box';
