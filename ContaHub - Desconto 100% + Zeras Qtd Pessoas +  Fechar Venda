@@ -1,0 +1,260 @@
+// ==UserScript==
+// @name         ContaHub - Desconto 100% + Zeras Qtd Pessoas +  Fechar Venda
+// @namespace    http://tampermonkey.net/
+// @version      1.3
+// @description  Aplicar desconto 100%, zerar pessoas e fechar venda
+// @match        https://sp.contahub.com/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // =========================
+    // UTIL
+    // =========================
+    function sleep(ms) {
+        return new Promise(function(resolve) {
+            setTimeout(resolve, ms);
+        });
+    }
+
+    // =========================
+    // FUNÇÃO PRINCIPAL
+    // =========================
+    async function aplicarDesconto100() {
+
+        try {
+
+            console.log("=== INICIANDO PROCESSO ===");
+
+            // =========================
+            // MENU
+            // =========================
+            const butMenu = document.querySelector('#butMenu');
+
+            if (butMenu) {
+                butMenu.click();
+                console.log("Menu aberto");
+            }
+
+            await sleep(400);
+
+            // =========================
+            // DESCONTOS
+            // =========================
+            const butDesconto = document.querySelector('#butDesconto');
+
+            if (butDesconto) {
+                butDesconto.click();
+                console.log("Tela desconto aberta");
+            }
+
+            await sleep(800);
+
+            // =========================
+            // MARCAR TODOS
+            // =========================
+            const chkTudo = document.querySelector('#chkTudo');
+
+            if (chkTudo) {
+
+                chkTudo.checked = true;
+
+                chkTudo.dispatchEvent(new Event('change', {
+                    bubbles: true
+                }));
+
+                if (window.rightObj && window.rightObj.chkTudo) {
+                    window.rightObj.chkTudo(chkTudo);
+                }
+
+                console.log("Itens marcados");
+            }
+
+            // espera sistema processar
+            await sleep(1200);
+
+            // =========================
+            // INPUT 100
+            // =========================
+            const inputValor = document.querySelector('#inputValor');
+
+            if (inputValor) {
+
+                inputValor.focus();
+
+                inputValor.value = '100';
+
+                inputValor.dispatchEvent(new Event('input', {
+                    bubbles: true
+                }));
+
+                inputValor.dispatchEvent(new Event('change', {
+                    bubbles: true
+                }));
+
+                console.log("100 preenchido");
+            }
+
+            // espera recalcular desconto
+            await sleep(1500);
+
+            // =========================
+            // APLICAR
+            // =========================
+            const butAplica = document.querySelector('#butAplica');
+
+            if (butAplica) {
+
+                console.log("Aplicando desconto");
+
+                butAplica.click();
+            }
+
+            // espera finalizar desconto
+            await sleep(1800);
+
+            // =========================
+            // VOLTAR
+            // =========================
+            const butVoltar = document.querySelector('#butVoltar');
+
+            if (butVoltar) {
+
+                console.log("Voltando");
+
+                butVoltar.click();
+            }
+
+            // espera tela principal
+            await sleep(1200);
+
+            // =========================
+            // ZERAR PESSOAS
+            // =========================
+            const vdPessoas = document.querySelector('#vd_pessoas');
+
+            if (vdPessoas) {
+
+                // define valor
+                vdPessoas.value = '0';
+
+                // limpa selected atual
+                Array.from(vdPessoas.options).forEach(function(opt) {
+                    opt.selected = false;
+                });
+
+                // seleciona option 0
+                const optionZero = vdPessoas.querySelector('option[value="0"]');
+
+                if (optionZero) {
+                    optionZero.selected = true;
+                }
+
+                // eventos
+                vdPessoas.dispatchEvent(new Event('change', {
+                    bubbles: true
+                }));
+
+                vdPessoas.dispatchEvent(new Event('input', {
+                    bubbles: true
+                }));
+
+                // função interna
+                if (window.vendaView && window.vendaView.pessoas) {
+                    window.vendaView.pessoas('0');
+                }
+
+                // refresh jQuery Mobile
+                if (window.$) {
+                    try {
+                        window.$('#vd_pessoas').selectmenu('refresh', true);
+                    } catch(e) {}
+                }
+
+                console.log("Pessoas zeradas");
+            }
+
+            // espera processamento
+            await sleep(1000);
+
+            // =========================
+            // FECHAR VENDA
+            // =========================
+            const butSomenteFecha = document.querySelector('#butSomenteFecha');
+
+            if (butSomenteFecha) {
+
+                console.log("Fechando venda");
+
+                butSomenteFecha.click();
+            }
+
+            console.log("=== PROCESSO FINALIZADO ===");
+
+        } catch (e) {
+
+            console.error("ERRO:", e);
+        }
+    }
+
+    // =========================
+    // BOTÃO FLUTUANTE
+    // =========================
+    function criarBotao() {
+
+        if (document.getElementById('btn-desconto-100')) {
+            return;
+        }
+
+        const btn = document.createElement('button');
+
+        btn.id = 'btn-desconto-100';
+
+        btn.innerText = 'DESC 100%';
+
+        btn.style.position = 'fixed';
+        btn.style.bottom = '20px';
+        btn.style.right = '20px';
+
+        btn.style.zIndex = '999999';
+
+        btn.style.background = '#ffffff';
+        btn.style.color = '#7f7f7f';
+
+        btn.style.border = 'none';
+
+        btn.style.padding = '14px 18px';
+
+        btn.style.borderRadius = '12px';
+
+        btn.style.fontSize = '14px';
+        btn.style.fontWeight = 'bold';
+
+        btn.style.cursor = 'pointer';
+
+        btn.style.boxShadow = '0 4px 10px rgba(0,0,0,0.4)';
+
+        btn.onclick = aplicarDesconto100;
+
+        document.body.appendChild(btn);
+
+        console.log("Botão criado");
+    }
+
+    // =========================
+    // INIT
+    // =========================
+    const init = setInterval(function () {
+
+        if (document.body) {
+
+            criarBotao();
+
+            clearInterval(init);
+        }
+
+    }, 1000);
+
+})();
