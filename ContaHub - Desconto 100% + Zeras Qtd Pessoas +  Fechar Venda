@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         ContaHub - Desconto 100% + Fechar Venda
+// @name         ContaHub - Desconto 100% + Zerar Qtd Pessoas +  Fechar Venda + Apenas autorizados
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.5
 // @description  Aplicar desconto 100%, zerar pessoas e fechar venda
 // @match        https://sp.contahub.com/*
 // @grant        none
@@ -9,6 +9,26 @@
 
 (function () {
     'use strict';
+
+    // =========================
+    // USUÁRIOS AUTORIZADOS
+    // =========================
+    const donosAutorizados = [
+        'aldy@664',
+        'jullios@664'
+    ];
+
+    // =========================
+    // VALIDA USUÁRIO
+    // =========================
+    function usuarioAutorizado() {
+
+        return (
+            window.contahub &&
+            window.contahub.u &&
+            donosAutorizados.includes(window.contahub.u.usr_email)
+        );
+    }
 
     // =========================
     // UTIL
@@ -35,7 +55,6 @@
 
             if (butMenu) {
                 butMenu.click();
-                console.log("Menu aberto");
             }
 
             await sleep(400);
@@ -47,7 +66,6 @@
 
             if (butDesconto) {
                 butDesconto.click();
-                console.log("Tela desconto aberta");
             }
 
             await sleep(800);
@@ -68,11 +86,8 @@
                 if (window.rightObj && window.rightObj.chkTudo) {
                     window.rightObj.chkTudo(chkTudo);
                 }
-
-                console.log("Itens marcados");
             }
 
-            // espera sistema processar
             await sleep(1200);
 
             // =========================
@@ -93,11 +108,8 @@
                 inputValor.dispatchEvent(new Event('change', {
                     bubbles: true
                 }));
-
-                console.log("100 preenchido");
             }
 
-            // espera recalcular desconto
             await sleep(1500);
 
             // =========================
@@ -106,13 +118,9 @@
             const butAplica = document.querySelector('#butAplica');
 
             if (butAplica) {
-
-                console.log("Aplicando desconto");
-
                 butAplica.click();
             }
 
-            // espera finalizar desconto
             await sleep(1800);
 
             // =========================
@@ -121,13 +129,9 @@
             const butVoltar = document.querySelector('#butVoltar');
 
             if (butVoltar) {
-
-                console.log("Voltando");
-
                 butVoltar.click();
             }
 
-            // espera tela principal
             await sleep(1200);
 
             // =========================
@@ -137,22 +141,18 @@
 
             if (vdPessoas) {
 
-                // define valor
                 vdPessoas.value = '0';
 
-                // limpa selected atual
                 Array.from(vdPessoas.options).forEach(function(opt) {
                     opt.selected = false;
                 });
 
-                // seleciona option 0
                 const optionZero = vdPessoas.querySelector('option[value="0"]');
 
                 if (optionZero) {
                     optionZero.selected = true;
                 }
 
-                // eventos
                 vdPessoas.dispatchEvent(new Event('change', {
                     bubbles: true
                 }));
@@ -161,22 +161,17 @@
                     bubbles: true
                 }));
 
-                // função interna
                 if (window.vendaView && window.vendaView.pessoas) {
                     window.vendaView.pessoas('0');
                 }
 
-                // refresh jQuery Mobile
                 if (window.$) {
                     try {
                         window.$('#vd_pessoas').selectmenu('refresh', true);
                     } catch(e) {}
                 }
-
-                console.log("Pessoas zeradas");
             }
 
-            // espera processamento
             await sleep(1000);
 
             // =========================
@@ -185,9 +180,6 @@
             const butSomenteFecha = document.querySelector('#butSomenteFecha');
 
             if (butSomenteFecha) {
-
-                console.log("Fechando venda");
-
                 butSomenteFecha.click();
             }
 
@@ -204,6 +196,12 @@
     // =========================
     function criarBotao() {
 
+        // SEGURANÇA
+        if (!usuarioAutorizado()) {
+            return;
+        }
+
+        // EVITA DUPLICAR
         if (document.getElementById('btn-desconto-100')) {
             return;
         }
@@ -247,7 +245,11 @@
     // =========================
     const init = setInterval(function () {
 
-        if (document.body) {
+        if (
+            document.body &&
+            window.contahub &&
+            window.contahub.u
+        ) {
 
             criarBotao();
 
