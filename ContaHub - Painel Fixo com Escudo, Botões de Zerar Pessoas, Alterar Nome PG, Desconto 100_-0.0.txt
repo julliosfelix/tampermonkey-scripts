@@ -1,0 +1,259 @@
+// ==UserScript==
+// @name         ContaHub - Painel Fixo com Escudo, Botões de Zerar Pessoas, Alterar Nome PG, Desconto 100%
+// @namespace    http://tampermonkey.net/
+// @version      2.16
+// @description  Barra de pesquisa liberada mesmo com escudo ativo
+// @match        https://sp.contahub.com/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const donosAutorizados = ['aldy@664', 'jullios@664'];
+
+    function usuarioAutorizado() {
+        return (window.contahub && window.contahub.u && donosAutorizados.includes(window.contahub.u.usr_email));
+    }
+
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+    let timeoutBlackout = null;
+    let isAutomating = false;
+
+    // Configurações de Largura
+    const LARGURA_PAINEL = '293px';
+    const MARGEM_BOTOES = '313px';
+
+    // =========================
+    // ATUALIZAR TELA BASE
+    // =========================
+    function atualizarPainelPrincipal() {
+        try {
+            if (window.index && typeof window.index.onRecarregar === 'function') {
+                window.index.ultimoRecarregar = new Date(0);
+                window.index.onRecarregar();
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    // =========================
+    // ESCUDO DE BLOQUEIO
+    // =========================
+    function ativarEscudoForcado() {
+        const escudo = document.getElementById('escudo-bloqueio');
+        const botoes = document.getElementById('container-botoes-contahub');
+        if (escudo) escudo.style.display = 'block';
+        if (botoes) botoes.style.display = 'none';
+        if (document.activeElement) document.activeElement.blur();
+    }
+
+    function criarEscudo() {
+        if (document.getElementById('escudo-bloqueio')) return;
+
+        const escudo = document.createElement('div');
+        escudo.id = 'escudo-bloqueio';
+        escudo.style.position = 'fixed';
+        escudo.style.right = '0';
+        escudo.style.top = '0';
+        escudo.style.width = LARGURA_PAINEL;
+        escudo.style.height = '100vh';
+        escudo.style.backgroundColor = '#000000';
+        escudo.style.opacity = '0.98';
+        escudo.style.zIndex = '99999';
+        escudo.style.display = 'none';
+        escudo.style.cursor = 'pointer';
+
+        escudo.innerHTML = `
+            <div style="color: #666; text-align: center; margin-top: 45vh; font-family: Arial, sans-serif; pointer-events: none;">
+                <div style="font-size: 14px; margin-top: 8px;">Clique aqui ou abra uma<br>mesa para desbloquear</div>
+            </div>
+        `;
+        document.body.appendChild(escudo);
+
+        // BLOQUEIO INTELIGENTE: Só bloqueia se o foco NÃO estiver em um input
+        const bloquearTeclado = function(e) {
+            const tag = document.activeElement.tagName.toLowerCase();
+            const isInput = (tag === 'input' || tag === 'textarea');
+
+            // Se o escudo está ativo E o foco não está em um campo de texto, bloqueia
+            if (escudo.style.display === 'block' && !isInput) {
+                e.stopImmediatePropagation();
+                e.preventDefault();
+                return false;
+            }
+        };
+
+        window.addEventListener('keydown', bloquearTeclado, true);
+        window.addEventListener('keyup', bloquearTeclado, true);
+        window.addEventListener('keypress', bloquearTeclado, true);
+
+        escudo.addEventListener('mousedown', function(e) {
+            if (timeoutBlackout) clearTimeout(timeoutBlackout);
+            escudo.style.display = 'none';
+            const botoes = document.getElementById('container-botoes-contahub');
+            if (botoes) botoes.style.display = 'flex';
+            e.stopPropagation();
+        });
+
+        document.addEventListener('mousedown', function(e) {
+            if (isAutomating) return;
+            const painel = document.getElementById('panelDireita');
+            const botoes = document.getElementById('container-botoes-contahub');
+
+            if (!painel || painel.innerHTML.trim() === '') return;
+            if (escudo.contains(e.target)) return;
+            if (painel.contains(e.target)) return;
+            if (botoes && botoes.contains(e.target)) return;
+
+            if (timeoutBlackout) clearTimeout(timeoutBlackout);
+            timeoutBlackout = setTimeout(() => {
+                ativarEscudoForcado();
+            }, 250);
+        });
+
+        const painel = document.getElementById('panelDireita');
+        if (painel) {
+            const observer = new MutationObserver(() => {
+                if (isAutomating) return;
+                if (timeoutBlackout) clearTimeout(timeoutBlackout);
+                if (escudo.style.display !== 'none') {
+                    escudo.style.display = 'none';
+                    const botoes = document.getElementById('container-botoes-contahub');
+                    if (botoes) botoes.style.display = 'flex';
+                }
+            });
+            observer.observe(painel, { childList: true, subtree: true });
+        }
+    }
+
+    // =========================
+    // CONTROLE DINÂMICO DO LAYOUT
+    // =========================
+    function gerenciarLayoutPainel() {
+        if (isAutomating) return;
+        let style = document.getElementById('css-painel-fixo');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'css-painel-fixo';
+            document.head.appendChild(style);
+        }
+
+        const painelTemConteudo = document.querySelector('#panelDireita *');
+        const painelAberto = document.querySelector('#panelDireita.ui-panel-open');
+        const escudo = document.getElementById('escudo-bloqueio');
+        const container = document.getElementById('container-botoes-contahub');
+
+        if (painelTemConteudo || painelAberto) {
+            style.innerHTML = `
+                #panelDireita {
+                    display: block !important; visibility: visible !important; position: fixed !important;
+                    right: 0 !important; top: 0 !important; bottom: 0 !important;
+                    width: ${LARGURA_PAINEL} !important; height: 100vh !important;
+                    transform: none !important; clip: auto !important; z-index: 99998 !important;
+                    background-image: url('img/fundo-preto-degrade.jpg') !important;
+                    background-color: #1a1a1a !important; overflow-y: auto !important;
+                    box-shadow: -2px 0 5px rgba(0,0,0,0.5);
+                }
+                .ui-page-active { padding-right: ${LARGURA_PAINEL} !important; box-sizing: border-box !important; }
+                #mainHeader { padding-right: ${LARGURA_PAINEL} !important; }
+                .ui-panel-dismiss { display: none !important; }
+            `;
+            if (container) {
+                container.style.right = MARGEM_BOTOES;
+                if (escudo && escudo.style.display !== 'block') container.style.display = 'flex';
+            }
+        } else {
+            if (timeoutBlackout) clearTimeout(timeoutBlackout);
+            style.innerHTML = '';
+            if (escudo) escudo.style.display = 'none';
+            if (container) { container.style.right = '20px'; container.style.display = 'flex'; }
+        }
+    }
+
+    // =========================
+    // FUNÇÕES DE AUTOMAÇÃO (Resumidas para brevidade)
+    // =========================
+    async function aplicarDesconto100() {
+        isAutomating = true;
+        try {
+            const butMenu = document.querySelector('#butMenu'); if (butMenu) butMenu.click(); await sleep(400);
+            const butDesconto = document.querySelector('#butDesconto'); if (butDesconto) butDesconto.click(); await sleep(800);
+            const chkTudo = document.querySelector('#chkTudo');
+            if (chkTudo) { chkTudo.checked = true; chkTudo.dispatchEvent(new Event('change', { bubbles: true })); if (window.rightObj && window.rightObj.chkTudo) window.rightObj.chkTudo(chkTudo); }
+            await sleep(1200);
+            const inputValor = document.querySelector('#inputValor');
+            if (inputValor) { inputValor.focus(); inputValor.value = '100'; inputValor.dispatchEvent(new Event('input', { bubbles: true })); inputValor.dispatchEvent(new Event('change', { bubbles: true })); }
+            await sleep(1500);
+            const butAplica = document.querySelector('#butAplica'); if (butAplica) butAplica.click(); await sleep(1800);
+            const butVoltar = document.querySelector('#butVoltar'); if (butVoltar) butVoltar.click(); await sleep(1200);
+            const vdPessoas = document.querySelector('#vd_pessoas');
+            if (vdPessoas) { vdPessoas.value = '0'; Array.from(vdPessoas.options).forEach(opt => opt.selected = false); const optionZero = vdPessoas.querySelector('option[value="0"]'); if (optionZero) optionZero.selected = true; vdPessoas.dispatchEvent(new Event('change', { bubbles: true })); vdPessoas.dispatchEvent(new Event('input', { bubbles: true })); if (window.vendaView && window.vendaView.pessoas) window.vendaView.pessoas('0'); }
+            await sleep(1000);
+            const butSomenteFecha = document.querySelector('#butSomenteFecha'); if (butSomenteFecha) butSomenteFecha.click();
+            await sleep(1000); atualizarPainelPrincipal();
+        } catch (e) { console.error("ERRO:", e); } finally { isAutomating = false; }
+    }
+
+    async function adicionarPG() {
+        isAutomating = true;
+        try {
+            const butMenu = document.querySelector('#butMenu'); if (butMenu) butMenu.click(); await sleep(400);
+            const butInfo = document.querySelector('#butInfo'); if (butInfo) butInfo.click(); await sleep(800);
+            const inputComanda = document.querySelector('#vd_mesadesc');
+            if (inputComanda) {
+                let valorAtual = inputComanda.value.trim();
+                if (!valorAtual.toUpperCase().startsWith('PG')) {
+                    inputComanda.value = valorAtual ? 'PG ' + valorAtual : 'PG';
+                    inputComanda.dispatchEvent(new Event('input', { bubbles: true }));
+                    inputComanda.dispatchEvent(new Event('change', { bubbles: true }));
+                    inputComanda.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+                    if (window.index && window.index.renewPanelDireita) window.index.renewPanelDireita();
+                }
+            }
+            await sleep(800);
+            const butSave = document.querySelector('#butSave'); if (butSave) butSave.click();
+            await sleep(1500);
+            const butVoltar = document.querySelector('#butVoltar'); if (butVoltar) butVoltar.click();
+            await sleep(500);
+            atualizarPainelPrincipal(); ativarEscudoForcado();
+        } catch (e) { console.error("ERRO:", e); } finally { isAutomating = false; }
+    }
+
+    async function zerarPessoas() {
+        isAutomating = true;
+        try {
+            const vdPessoas = document.querySelector('#vd_pessoas');
+            if (vdPessoas) {
+                vdPessoas.value = '0'; Array.from(vdPessoas.options).forEach(opt => opt.selected = false);
+                const optionZero = vdPessoas.querySelector('option[value="0"]'); if (optionZero) optionZero.selected = true;
+                vdPessoas.dispatchEvent(new Event('change', { bubbles: true })); vdPessoas.dispatchEvent(new Event('input', { bubbles: true }));
+                if (window.vendaView && window.vendaView.pessoas) window.vendaView.pessoas('0');
+            }
+            await sleep(800);
+            atualizarPainelPrincipal(); ativarEscudoForcado();
+        } catch (e) { console.error("ERRO:", e); } finally { isAutomating = false; }
+    }
+
+    function criarBotoes() {
+        if (!usuarioAutorizado() || document.getElementById('container-botoes-contahub')) return;
+        const container = document.createElement('div');
+        container.id = 'container-botoes-contahub';
+        container.style.position = 'fixed'; container.style.bottom = '20px'; container.style.right = '20px'; container.style.zIndex = '99998'; container.style.display = 'flex'; container.style.gap = '10px';
+        const btnZero = document.createElement('button'); btnZero.innerText = '0'; btnZero.style.background = '#64B5F6'; btnZero.style.color = '#fff'; btnZero.style.border = 'none'; btnZero.style.padding = '14px 18px'; btnZero.style.borderRadius = '12px'; btnZero.style.fontWeight = 'bold'; btnZero.style.cursor = 'pointer'; btnZero.onclick = zerarPessoas;
+        const btnPG = document.createElement('button'); btnPG.innerText = 'PG'; btnPG.style.background = '#81C784'; btnPG.style.color = '#fff'; btnPG.style.border = 'none'; btnPG.style.padding = '14px 18px'; btnPG.style.borderRadius = '12px'; btnPG.style.fontWeight = 'bold'; btnPG.style.cursor = 'pointer'; btnPG.onclick = adicionarPG;
+        const btnDesc = document.createElement('button'); btnDesc.innerText = '100%'; btnDesc.style.background = '#ffc0a5'; btnDesc.style.color = '#333'; btnDesc.style.border = 'none'; btnDesc.style.padding = '14px 18px'; btnDesc.style.borderRadius = '12px'; btnDesc.style.fontWeight = 'bold'; btnDesc.style.cursor = 'pointer'; btnDesc.onclick = function() {
+            if (document.getElementById('caixa-confirmacao-100')) return;
+            const confirmBox = document.createElement('div'); confirmBox.id = 'caixa-confirmacao-100'; confirmBox.style.position = 'fixed'; confirmBox.style.bottom = '80px'; confirmBox.style.right = container.style.right; confirmBox.style.zIndex = '999999'; confirmBox.style.background = '#ffffff'; confirmBox.style.border = '1px solid #ccc'; confirmBox.style.padding = '15px'; confirmBox.style.borderRadius = '8px'; confirmBox.innerHTML = `<p style="margin:0 0 15px; font-size:14px; color:#333; font-weight:bold;">Aplicar 100% e fechar?</p><button id="btn-confirma-sim" style="background:#4CAF50; color:white; border:none; padding:8px 15px; cursor:pointer; margin-right:10px;">SIM</button><button id="btn-confirma-nao" style="background:#f44336; color:white; border:none; padding:8px 15px; cursor:pointer;">NÃO</button>`; document.body.appendChild(confirmBox);
+            document.getElementById('btn-confirma-sim').onclick = function() { confirmBox.remove(); aplicarDesconto100(); };
+            document.getElementById('btn-confirma-nao').onclick = function() { confirmBox.remove(); };
+        };
+        container.append(btnZero, btnPG, btnDesc); document.body.appendChild(container);
+    }
+
+    const init = setInterval(function () {
+        if (document.body && window.contahub && window.contahub.u && window.contahub.u.usr_email) {
+            criarEscudo(); criarBotoes(); setInterval(gerenciarLayoutPainel, 300); clearInterval(init);
+        }
+    }, 1000);
+})();
