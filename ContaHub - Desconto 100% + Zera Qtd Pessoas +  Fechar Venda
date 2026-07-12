@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         ContaHub - Desconto 100% + Zerar Qtd Pessoas +  Fechar Venda + Apenas autorizados
+// @name         ContaHub - Desconto 100% + Fechar Venda & Add PG & Zerar Pessoas
 // @namespace    http://tampermonkey.net/
-// @version      1.5
-// @description  Aplicar desconto 100%, zerar pessoas e fechar venda
+// @version      2.2
+// @description  Três botões: Zerar Pessoas, Add PG e Desc 100%
 // @match        https://sp.contahub.com/*
 // @grant        none
 // ==/UserScript==
@@ -22,7 +22,6 @@
     // VALIDA USUÁRIO
     // =========================
     function usuarioAutorizado() {
-
         return (
             window.contahub &&
             window.contahub.u &&
@@ -40,222 +39,299 @@
     }
 
     // =========================
-    // FUNÇÃO PRINCIPAL
+    // FUNÇÃO 1: DESCONTO 100%
     // =========================
     async function aplicarDesconto100() {
-
         try {
+            console.log("=== INICIANDO DESCONTO 100% ===");
 
-            console.log("=== INICIANDO PROCESSO ===");
-
-            // =========================
-            // MENU
-            // =========================
             const butMenu = document.querySelector('#butMenu');
-
-            if (butMenu) {
-                butMenu.click();
-            }
-
+            if (butMenu) butMenu.click();
             await sleep(400);
 
-            // =========================
-            // DESCONTOS
-            // =========================
             const butDesconto = document.querySelector('#butDesconto');
-
-            if (butDesconto) {
-                butDesconto.click();
-            }
-
+            if (butDesconto) butDesconto.click();
             await sleep(800);
 
-            // =========================
-            // MARCAR TODOS
-            // =========================
             const chkTudo = document.querySelector('#chkTudo');
-
             if (chkTudo) {
-
                 chkTudo.checked = true;
-
-                chkTudo.dispatchEvent(new Event('change', {
-                    bubbles: true
-                }));
-
+                chkTudo.dispatchEvent(new Event('change', { bubbles: true }));
                 if (window.rightObj && window.rightObj.chkTudo) {
                     window.rightObj.chkTudo(chkTudo);
                 }
             }
-
             await sleep(1200);
 
-            // =========================
-            // INPUT 100
-            // =========================
             const inputValor = document.querySelector('#inputValor');
-
             if (inputValor) {
-
                 inputValor.focus();
-
                 inputValor.value = '100';
-
-                inputValor.dispatchEvent(new Event('input', {
-                    bubbles: true
-                }));
-
-                inputValor.dispatchEvent(new Event('change', {
-                    bubbles: true
-                }));
+                inputValor.dispatchEvent(new Event('input', { bubbles: true }));
+                inputValor.dispatchEvent(new Event('change', { bubbles: true }));
             }
-
             await sleep(1500);
 
-            // =========================
-            // APLICAR
-            // =========================
             const butAplica = document.querySelector('#butAplica');
-
-            if (butAplica) {
-                butAplica.click();
-            }
-
+            if (butAplica) butAplica.click();
             await sleep(1800);
 
-            // =========================
-            // VOLTAR
-            // =========================
             const butVoltar = document.querySelector('#butVoltar');
-
-            if (butVoltar) {
-                butVoltar.click();
-            }
-
+            if (butVoltar) butVoltar.click();
             await sleep(1200);
 
-            // =========================
-            // ZERAR PESSOAS
-            // =========================
             const vdPessoas = document.querySelector('#vd_pessoas');
-
             if (vdPessoas) {
-
                 vdPessoas.value = '0';
-
-                Array.from(vdPessoas.options).forEach(function(opt) {
-                    opt.selected = false;
-                });
-
+                Array.from(vdPessoas.options).forEach(opt => opt.selected = false);
                 const optionZero = vdPessoas.querySelector('option[value="0"]');
+                if (optionZero) optionZero.selected = true;
 
-                if (optionZero) {
-                    optionZero.selected = true;
-                }
-
-                vdPessoas.dispatchEvent(new Event('change', {
-                    bubbles: true
-                }));
-
-                vdPessoas.dispatchEvent(new Event('input', {
-                    bubbles: true
-                }));
+                vdPessoas.dispatchEvent(new Event('change', { bubbles: true }));
+                vdPessoas.dispatchEvent(new Event('input', { bubbles: true }));
 
                 if (window.vendaView && window.vendaView.pessoas) {
                     window.vendaView.pessoas('0');
                 }
-
                 if (window.$) {
-                    try {
-                        window.$('#vd_pessoas').selectmenu('refresh', true);
-                    } catch(e) {}
+                    try { window.$('#vd_pessoas').selectmenu('refresh', true); } catch(e) {}
                 }
             }
-
             await sleep(1000);
 
-            // =========================
-            // FECHAR VENDA
-            // =========================
             const butSomenteFecha = document.querySelector('#butSomenteFecha');
-
-            if (butSomenteFecha) {
-                butSomenteFecha.click();
-            }
+            if (butSomenteFecha) butSomenteFecha.click();
 
             console.log("=== PROCESSO FINALIZADO ===");
 
         } catch (e) {
-
             console.error("ERRO:", e);
         }
     }
 
     // =========================
-    // BOTÃO FLUTUANTE
+    // FUNÇÃO 2: ADICIONAR "PG "
     // =========================
-    function criarBotao() {
+    async function adicionarPG() {
+        try {
+            console.log("=== INICIANDO ADICIONAR PG ===");
 
-        // SEGURANÇA
-        if (!usuarioAutorizado()) {
-            return;
+            const butMenu = document.querySelector('#butMenu');
+            if (butMenu) butMenu.click();
+            await sleep(400);
+
+            const butInfo = document.querySelector('#butInfo');
+            if (butInfo) butInfo.click();
+            await sleep(800);
+
+            const inputComanda = document.querySelector('#vd_mesadesc');
+            if (inputComanda) {
+                let valorAtual = inputComanda.value.trim();
+
+                if (!valorAtual.toUpperCase().startsWith('PG')) {
+                    inputComanda.value = valorAtual ? 'PG ' + valorAtual : 'PG';
+
+                    inputComanda.dispatchEvent(new Event('input', { bubbles: true }));
+                    inputComanda.dispatchEvent(new Event('change', { bubbles: true }));
+                    inputComanda.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+
+                    if (window.index && window.index.renewPanelDireita) {
+                        window.index.renewPanelDireita();
+                    }
+                }
+            }
+            await sleep(800);
+
+            const butSave = document.querySelector('#butSave');
+            if (butSave) butSave.click();
+
+            await sleep(1000);
+
+            console.log("Fechando a tela de Dados...");
+
+            const butVoltar = document.querySelector('#butVoltar');
+            if (butVoltar) {
+                butVoltar.click();
+            } else {
+                if (window.index && typeof window.index.closePanelDireita === 'function') {
+                    window.index.closePanelDireita();
+                } else {
+                     const overlay = document.querySelector('.ui-panel-dismiss-open');
+                     if (overlay) overlay.click();
+                }
+            }
+
+            console.log("=== PROCESSO ADICIONAR PG FINALIZADO ===");
+
+        } catch (e) {
+            console.error("ERRO NO ADICIONAR PG:", e);
         }
+    }
 
-        // EVITA DUPLICAR
-        if (document.getElementById('btn-desconto-100')) {
-            return;
+    // =========================
+    // FUNÇÃO 3: ZERAR PESSOAS
+    // =========================
+    async function zerarPessoas() {
+        try {
+            console.log("=== INICIANDO ZERAR PESSOAS ===");
+
+            const vdPessoas = document.querySelector('#vd_pessoas');
+            if (vdPessoas) {
+                vdPessoas.value = '0';
+                Array.from(vdPessoas.options).forEach(opt => opt.selected = false);
+                const optionZero = vdPessoas.querySelector('option[value="0"]');
+                if (optionZero) optionZero.selected = true;
+
+                vdPessoas.dispatchEvent(new Event('change', { bubbles: true }));
+                vdPessoas.dispatchEvent(new Event('input', { bubbles: true }));
+
+                if (window.vendaView && window.vendaView.pessoas) {
+                    window.vendaView.pessoas('0');
+                }
+                if (window.$) {
+                    try { window.$('#vd_pessoas').selectmenu('refresh', true); } catch(e) {}
+                }
+            }
+
+            await sleep(500);
+
+            // === VOLTAR / FECHAR PAINEL ===
+            console.log("Garantindo que o painel seja fechado...");
+
+            const butVoltar = document.querySelector('#butVoltar');
+            if (butVoltar) {
+                butVoltar.click();
+            } else {
+                if (window.index && typeof window.index.closePanelDireita === 'function') {
+                    window.index.closePanelDireita();
+                } else {
+                     const overlay = document.querySelector('.ui-panel-dismiss-open');
+                     if (overlay) overlay.click();
+                }
+            }
+
+            console.log("=== PROCESSO ZERAR PESSOAS FINALIZADO ===");
+
+        } catch (e) {
+            console.error("ERRO NO ZERAR PESSOAS:", e);
         }
+    }
 
-        const btn = document.createElement('button');
+    // =========================
+    // UI: CONTAINER E BOTÕES
+    // =========================
+    function criarBotoes() {
+        if (!usuarioAutorizado()) return;
 
-        btn.id = 'btn-desconto-100';
+        if (document.getElementById('container-botoes-contahub')) return;
 
-        btn.innerText = 'DESC 100%';
+        const container = document.createElement('div');
+        container.id = 'container-botoes-contahub';
+        container.style.position = 'fixed';
+        container.style.bottom = '20px';
+        container.style.right = '20px';
+        container.style.zIndex = '999998';
+        container.style.display = 'flex';
+        container.style.gap = '10px';
 
-        btn.style.position = 'fixed';
-        btn.style.bottom = '20px';
-        btn.style.right = '20px';
+        // Botão 1: ZERAR PESSOAS
+        const btnZero = document.createElement('button');
+        btnZero.innerText = '0';
+        btnZero.style.background = '#64B5F6'; // Azul Claro
+        btnZero.style.color = '#fff';
+        btnZero.style.border = 'none';
+        btnZero.style.padding = '14px 18px';
+        btnZero.style.borderRadius = '12px';
+        btnZero.style.fontSize = '14px';
+        btnZero.style.fontWeight = 'bold';
+        btnZero.style.cursor = 'pointer';
+        btnZero.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+        btnZero.onclick = zerarPessoas;
 
-        btn.style.zIndex = '999999';
+        // Botão 2: ADD PG
+        const btnPG = document.createElement('button');
+        btnPG.innerText = 'PG';
+        btnPG.style.background = '#81C784';
+        btnPG.style.color = '#fff';
+        btnPG.style.border = 'none';
+        btnPG.style.padding = '14px 18px';
+        btnPG.style.borderRadius = '12px';
+        btnPG.style.fontSize = '14px';
+        btnPG.style.fontWeight = 'bold';
+        btnPG.style.cursor = 'pointer';
+        btnPG.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+        btnPG.onclick = adicionarPG;
 
-        btn.style.background = 'transparent';
-        btn.style.color = '#7f7f7f';
-        btn.style.border = 'none';
+        // Botão 3: DESC 100%
+        const btnDesc = document.createElement('button');
+        btnDesc.innerText = '100%';
+        btnDesc.style.background = '#ffc0a5';
+        btnDesc.style.color = '#333';
+        btnDesc.style.border = 'none';
+        btnDesc.style.padding = '14px 18px';
+        btnDesc.style.borderRadius = '12px';
+        btnDesc.style.fontSize = '14px';
+        btnDesc.style.fontWeight = 'bold';
+        btnDesc.style.cursor = 'pointer';
+        btnDesc.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
 
-        btn.style.padding = '14px 18px';
+        btnDesc.onclick = function() {
+            if (document.getElementById('caixa-confirmacao-100')) return;
 
-        btn.style.borderRadius = '12px';
+            const confirmBox = document.createElement('div');
+            confirmBox.id = 'caixa-confirmacao-100';
+            confirmBox.style.position = 'fixed';
+            confirmBox.style.bottom = '80px';
+            confirmBox.style.right = '20px';
+            confirmBox.style.zIndex = '999999';
+            confirmBox.style.background = '#ffffff';
+            confirmBox.style.border = '1px solid #ccc';
+            confirmBox.style.padding = '15px';
+            confirmBox.style.borderRadius = '8px';
+            confirmBox.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+            confirmBox.style.textAlign = 'center';
+            confirmBox.style.fontFamily = 'Arial, sans-serif';
 
-        btn.style.fontSize = '14px';
-        btn.style.fontWeight = 'normal';
+            confirmBox.innerHTML = `
+                <p style="margin: 0 0 15px 0; font-size: 14px; color: #333; font-weight: bold;">
+                    Aplicar 100% de desconto e fechar?
+                </p>
+                <button id="btn-confirma-sim" style="background: #4CAF50; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px; margin-right: 10px; font-weight: bold;">
+                    SIM
+                </button>
+                <button id="btn-confirma-nao" style="background: #f44336; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 4px; font-weight: bold;">
+                    NÃO
+                </button>
+            `;
 
-        btn.style.cursor = 'pointer';
+            document.body.appendChild(confirmBox);
 
-        btn.style.boxShadow = '0 1px 2px rgba(0,0,0,0.4)';
+            document.getElementById('btn-confirma-sim').onclick = function() {
+                confirmBox.remove();
+                aplicarDesconto100();
+            };
 
-        btn.onclick = aplicarDesconto100;
+            document.getElementById('btn-confirma-nao').onclick = function() {
+                confirmBox.remove();
+            };
+        };
 
-        document.body.appendChild(btn);
+        // Adiciona os botões no container na ordem desejada (da esquerda para a direita)
+        container.appendChild(btnZero);
+        container.appendChild(btnPG);
+        container.appendChild(btnDesc);
 
-        console.log("Botão criado");
+        document.body.appendChild(container);
     }
 
     // =========================
     // INIT
     // =========================
     const init = setInterval(function () {
-
-        if (
-            document.body &&
-            window.contahub &&
-            window.contahub.u
-        ) {
-
-            criarBotao();
-
+        if (document.body && window.contahub && window.contahub.u) {
+            criarBotoes();
             clearInterval(init);
         }
-
     }, 1000);
 
 })();
