@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Getnet-Soma vendas no turno noturno (com madrugada do dia seguinte) para o site
 // @namespace    http://tampermonkey.net/
-// @version      3.5
-// @description  Soma Bruto Aprovado com Varredura Reforçada e Auto-Scroll
+// @version      4.0
+// @description  Soma Bruto Aprovado com Varredura Reforçada e Auto-Scroll (CORRIGIDO DUPLICIDADE E PRÉ-PAGO)
 // @author       Gemini
 // @match        *://minhaconta.getnet.com.br/historico-vendas/*
 // @grant        none
@@ -90,8 +90,10 @@
 
         todasLinhas.forEach(linha => {
             const texto = linha.innerText;
+            const textoLower = texto.toLowerCase();
+
             // Filtro rigoroso: Aprovada + Modalidade + Valor
-            if (texto.toLowerCase().includes('aprovada')) {
+            if (textoLower.includes('aprovada')) {
                 const dataMatch = texto.match(/(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})/);
                 const valores = texto.match(/R\$\s?(\d+\.?\d*,\d{2})/g);
 
@@ -106,14 +108,26 @@
                         const valorBrutoStr = valores[0];
                         const valorNum = parseFloat(valorBrutoStr.replace('R$', '').replace('.', '').replace(',', '.').trim());
 
-                        // Criamos um ID super único (Data + Hora + Valor + Texto da Linha) para evitar pular vendas
-                        const idVenda = data + hora + valorBrutoStr + texto.substring(0, 30);
+                        // CORREÇÃO 1: ID usando o texto INTEGRAL (Remove todos os espaços para consolidar cartões e NSU)
+                        const textoSemEspacos = texto.replace(/\s+/g, '');
+                        const idVenda = data + hora + valorBrutoStr + textoSemEspacos;
 
                         if (!vendasID.has(idVenda)) {
-                            if (texto.toLowerCase().includes('débito')) totalDebito += valorNum;
-                            else if (texto.toLowerCase().includes('crédito')) totalCredito += valorNum;
-                            vendasID.add(idVenda);
-                            encontradasNestaVez++;
+                            // CORREÇÃO 2: Verificação prioritária para forçar pré-pago no débito
+                            const isDebito = textoLower.includes('débito') || textoLower.includes('debito') || textoLower.includes('pré pago') || textoLower.includes('pré-pago') || textoLower.includes('pre pago');
+                            const isCredito = textoLower.includes('crédito') || textoLower.includes('credito');
+
+                            if (isDebito) {
+                                totalDebito += valorNum;
+                            } else if (isCredito && !isDebito) {
+                                // O "!isDebito" garante que se a tela mostrar "Crédito" mas também "pré-pago", ele vai pro débito
+                                totalCredito += valorNum;
+                            }
+
+                            if (isDebito || (isCredito && !isDebito)) {
+                                vendasID.add(idVenda);
+                                encontradasNestaVez++;
+                            }
                         }
                     }
                 }
