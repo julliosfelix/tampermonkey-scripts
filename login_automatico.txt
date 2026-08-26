@@ -1,0 +1,184 @@
+// ==UserScript==
+// @name         Auto-Preencher Login: Moodle, SEI e Zeus (Versão Coordenadores)
+// @namespace    http://tampermonkey.net/
+// @version      2.0
+// @description  Login automático com credenciais centralizadas. Clica em Diários e Ativar Filtro no Zeus.
+// @author       Coordenação
+// @match        *://*.etcvirtual.se.df.gov.br/moodle4/login/index.php*
+// @match        *://zeusdiario/*
+// @match        *://*.zeusdiario.com.br/etc/*
+// @match        *://sip.df.gov.br/sip/login.php*
+// @match        *://sei.df.gov.br/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // =========================================================================
+    // ⚙️ PAINEL DE CONFIGURAÇÃO DE CREDENCIAIS
+    // Preencha seus dados entre as aspas simples ('') abaixo.
+    // =========================================================================
+    const CREDENCIAIS = {
+        moodle: {
+            usuario: '',
+            senha: ''
+        },
+        zeus: {
+            cpf: '',   // Apenas números
+            senha: '',
+            tipo: '005'  // 005 = Coordenador(a)
+        },
+        sei: {
+            usuario: '', // Matrícula
+            senha: '',
+            orgao: '23'  // 23 = SEE
+        }
+    };
+    // =========================================================================
+    // NÃO É NECESSÁRIO ALTERAR NADA ABAIXO DESTA LINHA
+    // =========================================================================
+
+    const url = window.location.href;
+
+    function simularDigitacao(campo, valor, ehSenha = false) {
+        if (campo && valor !== '') {
+            campo.focus();
+            if (ehSenha) campo.type = 'password';
+            campo.value = valor;
+            campo.dispatchEvent(new Event('input', { bubbles: true }));
+            campo.dispatchEvent(new Event('change', { bubbles: true }));
+            campo.blur();
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Lógica para o Moodle ETCVirtual
+    // ---------------------------------------------------------
+    if (url.includes("etcvirtual.se.df.gov.br")) {
+        const tempoMoodle = setInterval(() => {
+            const campoUsuario = document.getElementById('username');
+            const campoSenha = document.getElementById('password');
+
+            if (campoUsuario && campoSenha) {
+                simularDigitacao(campoUsuario, CREDENCIAIS.moodle.usuario);
+                simularDigitacao(campoSenha, CREDENCIAIS.moodle.senha, true);
+
+                // Só clica se os dados foram preenchidos no painel
+                if (CREDENCIAIS.moodle.usuario !== '') {
+                    const botaoAcessar = document.getElementById('loginbtn');
+                    if (botaoAcessar) botaoAcessar.click();
+                }
+
+                clearInterval(tempoMoodle);
+            }
+        }, 500);
+    }
+
+    // ---------------------------------------------------------
+    // Lógica para o Zeus Diário
+    // ---------------------------------------------------------
+    if (url.includes("zeusdiario")) {
+
+        // Passo 1: Espera inteligente para a tela de Login
+        const tempoLogin = setInterval(function() {
+            const campoCpf = document.getElementById('cpf');
+            const campoSenha = document.getElementById('senha');
+            const campoTipo = document.getElementById('tipo');
+
+            if (campoCpf && campoTipo && campoSenha && !campoCpf.dataset.preenchido) {
+                simularDigitacao(campoCpf, CREDENCIAIS.zeus.cpf);
+                simularDigitacao(campoTipo, CREDENCIAIS.zeus.tipo);
+                simularDigitacao(campoSenha, CREDENCIAIS.zeus.senha, true);
+
+                campoCpf.dataset.preenchido = "true";
+
+                // Só clica se os dados foram preenchidos no painel
+                if (CREDENCIAIS.zeus.cpf !== '') {
+                    setTimeout(() => {
+                        let botaoEntrar = document.querySelector('button.bg-zeus-primary');
+
+                        if (!botaoEntrar) {
+                            const botoesNaTela = Array.from(document.querySelectorAll('button'));
+                            botaoEntrar = botoesNaTela.find(botao => botao.textContent.includes('Entrar'));
+                        }
+                        if (!botaoEntrar) botaoEntrar = document.querySelector('input[type="submit"][value="Entrar"]');
+
+                        if (botaoEntrar) botaoEntrar.click();
+                    }, 800);
+                }
+
+                clearInterval(tempoLogin);
+            }
+        }, 500);
+
+        // Passo 2: Espera inteligente para o botão "Diários" (novo layout)
+        const tempoDiarios = setInterval(function() {
+            const spans = Array.from(document.querySelectorAll('span'));
+            const spanDiario = spans.find(span => span.textContent.trim() === 'Diários');
+            let botaoDiarios = spanDiario ? spanDiario.closest('button') : null;
+
+            if (!botaoDiarios) {
+                botaoDiarios = document.querySelector('a[onclick*="chamar_rotina( 1 )"]');
+            }
+
+            if (botaoDiarios && !botaoDiarios.dataset.clicado) {
+                botaoDiarios.dataset.clicado = "true";
+
+                setTimeout(() => {
+                    botaoDiarios.click();
+                }, 500);
+
+                clearInterval(tempoDiarios);
+                iniciarBuscaFiltro();
+            }
+        }, 1000);
+/*
+        // Passo 3: Função para clicar no botão "Pesquisar/Ativar Filtro"
+        function iniciarBuscaFiltro() {
+            const tempoFiltro = setInterval(function() {
+                const botaoAtivarFiltro = document.querySelector('button[title="Ativar filtro"], button[aria-label="Ativar filtro"]');
+
+                if (botaoAtivarFiltro && !botaoAtivarFiltro.dataset.clicado) {
+                    botaoAtivarFiltro.dataset.clicado = "true";
+
+                    setTimeout(() => {
+                        botaoAtivarFiltro.click();
+                    }, 500);
+
+                    clearInterval(tempoFiltro);
+                }
+            }, 1000);
+        }
+*/
+    }
+
+    // ---------------------------------------------------------
+    // Lógica para o SIP / SEI (GDF)
+    // ---------------------------------------------------------
+    if (url.includes("sip.df.gov.br") || url.includes("sei.df.gov.br")) {
+        const tempoSEI = setInterval(function() {
+            const campoUsuarioSEI = document.getElementById('txtUsuario');
+            const campoOrgaoSEI = document.getElementById('selOrgao');
+            const campoSenhaSEI = document.getElementById('pwdSenha');
+
+            if (campoUsuarioSEI && campoSenhaSEI && campoOrgaoSEI && !campoUsuarioSEI.dataset.preenchido) {
+                simularDigitacao(campoUsuarioSEI, CREDENCIAIS.sei.usuario);
+                simularDigitacao(campoOrgaoSEI, CREDENCIAIS.sei.orgao);
+                simularDigitacao(campoSenhaSEI, CREDENCIAIS.sei.senha, true);
+
+                campoUsuarioSEI.dataset.preenchido = "true";
+
+                // Só clica se os dados foram preenchidos no painel
+                if (CREDENCIAIS.sei.usuario !== '') {
+                    setTimeout(() => {
+                        const botaoAcessarSEI = document.getElementById('sbmAcessar');
+                        if (botaoAcessarSEI) botaoAcessarSEI.click();
+                    }, 300);
+                }
+
+                clearInterval(tempoSEI);
+            }
+        }, 500);
+    }
+})();
