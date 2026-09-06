@@ -1,0 +1,394 @@
+// ==UserScript==
+// @name         ContaHub - Painel Fixo com Escudo, Botões de Zerar Pessoas, Alterar Nome PG, Desconto 100%
+// @namespace    http://tampermonkey.net/
+// @version      3.1
+// @description  Painel fixo funcional, botões de automação, ambiente, atalhos e navegação de turnos (Sem escudo/travamento)
+// @match        https://sp.contahub.com/*
+// @match        https://sp.contahub.com/rest/contahub.cmds.GerenciaCmd/getRelatorioTurnoHtml/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const donosAutorizados = ['aldy@664', 'jullios@664'];
+
+    function usuarioAutorizado() {
+        return (window.contahub && window.contahub.u && donosAutorizados.includes(window.contahub.u.usr_email));
+    }
+
+    function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+    const LARGURA_PAINEL = '293px';
+    const MARGEM_BOTOES = '313px';
+    let ambienteLocal = null;
+
+    // =========================================================================
+    // 1. MÓDULO DE TELA DE TURNOS (Overlay + Teclado)
+    // =========================================================================
+    if (window.location.pathname.includes('getRelatorioTurnoHtml')) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const trnAtual = parseInt(urlParams.get('trn'));
+        const empId = urlParams.get('emp');
+
+        if (trnAtual && empId) {
+            const baseUrl = window.location.origin + window.location.pathname;
+            const linkAnterior = `${baseUrl}?emp=${empId}&trn=${trnAtual - 1}`;
+            const linkProximo = `${baseUrl}?emp=${empId}&trn=${trnAtual + 1}`;
+
+            let textoExibicao = `Turno #${trnAtual}`;
+            const xpath = "//*[contains(text(), 'Resumo de Turno')]";
+            const elementoTitulo = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+
+            if (elementoTitulo) {
+                const textoCompleto = elementoTitulo.innerText;
+                const matchData = textoCompleto.match(/(\d{2}-[A-Za-zç]+\s\([A-Za-z]+\))/);
+                if (matchData && matchData[1]) {
+                    textoExibicao = matchData[1];
+                }
+            }
+
+            const containerTurno = document.createElement('div');
+            containerTurno.style.position = 'fixed';
+            containerTurno.style.top = '10px';
+            containerTurno.style.left = '50%';
+            containerTurno.style.transform = 'translateX(-50%)';
+            containerTurno.style.zIndex = '99999';
+            containerTurno.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+            containerTurno.style.padding = '8px 25px';
+            containerTurno.style.borderRadius = '50px';
+            containerTurno.style.boxShadow = '0 4px 10px rgba(0,0,0,0.2)';
+            containerTurno.style.border = '1px solid #ddd';
+            containerTurno.style.display = 'flex';
+            containerTurno.style.alignItems = 'center';
+            containerTurno.style.gap = '20px';
+            containerTurno.style.fontFamily = 'Segoe UI, Arial, sans-serif';
+
+            containerTurno.innerHTML = `
+                <a href="${linkAnterior}" style="text-decoration: none; font-size: 24px; cursor: pointer; user-select: none;" title="Anterior (Seta Esquerda)">⬅️</a>
+                <span style="font-weight: 700; font-size: 18px; color: #333; min-width: 120px; text-align: center;">${textoExibicao}</span>
+                <a href="${linkProximo}" style="text-decoration: none; font-size: 24px; cursor: pointer; user-select: none;" title="Próximo (Seta Direita)">➡️</a>
+            `;
+            document.body.appendChild(containerTurno);
+
+            document.addEventListener('keydown', function(e) {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                if (e.key === "ArrowLeft") {
+                    window.location.href = linkAnterior;
+                } else if (e.key === "ArrowRight") {
+                    window.location.href = linkProximo;
+                }
+            });
+        }
+        return;
+    }
+
+    // =========================================================================
+    // 2. MÓDULO PRINCIPAL (Painel Fixo Lateral, Botões, Ambiente e Atalhos)
+    // =========================================================================
+
+    function atualizarPainelPrincipal() {
+        try {
+            if (window.index && typeof window.index.onRecarregar === 'function') {
+                window.index.ultimoRecarregar = new Date(0);
+                window.index.onRecarregar();
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    // Apenas fixa o painel lateral visualmente (sem tela preta de travamento)
+    function gerenciarLayoutPainel() {
+        let style = document.getElementById('css-painel-fixo');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'css-painel-fixo';
+            document.head.appendChild(style);
+        }
+
+        const painelTemConteudo = document.querySelector('#panelDireita *');
+        const painelAberto = document.querySelector('#panelDireita.ui-panel-open');
+        const container = document.getElementById('container-botoes-contahub');
+
+        if (painelTemConteudo || painelAberto) {
+            style.innerHTML = `
+                #panelDireita {
+                    display: block !important; visibility: visible !important; position: fixed !important;
+                    right: 0 !important; top: 0 !important; bottom: 0 !important;
+                    width: ${LARGURA_PAINEL} !important; height: 100vh !important;
+                    transform: none !important; clip: auto !important; z-index: 99998 !important;
+                    background-image: url('img/fundo-preto-degrade.jpg') !important;
+                    background-color: #1a1a1a !important; overflow-y: auto !important;
+                    box-shadow: -2px 0 5px rgba(0,0,0,0.5);
+                }
+                .ui-page-active { padding-right: ${LARGURA_PAINEL} !important; box-sizing: border-box !important; }
+                #mainHeader { padding-right: ${LARGURA_PAINEL} !important; }
+                .ui-panel-dismiss { display: none !important; }
+            `;
+            if (container) {
+                container.style.right = MARGEM_BOTOES;
+                container.style.display = 'flex';
+            }
+        } else {
+            style.innerHTML = '';
+            if (container) {
+                container.style.right = '20px';
+                container.style.display = 'flex';
+            }
+        }
+    }
+
+    // --- Automação 1: Desconto 100% ---
+    async function aplicarDesconto100() {
+        try {
+            const butMenu = document.querySelector('#butMenu'); if (butMenu) butMenu.click(); await sleep(400);
+            const butDesconto = document.querySelector('#butDesconto'); if (butDesconto) butDesconto.click(); await sleep(800);
+            const chkTudo = document.querySelector('#chkTudo');
+            if (chkTudo) {
+                chkTudo.checked = true;
+                chkTudo.dispatchEvent(new Event('change', { bubbles: true }));
+                if (window.rightObj && window.rightObj.chkTudo) window.rightObj.chkTudo(chkTudo);
+            }
+            await sleep(1200);
+            const inputValor = document.querySelector('#inputValor');
+            if (inputValor) {
+                inputValor.focus();
+                inputValor.value = '100';
+                inputValor.dispatchEvent(new Event('input', { bubbles: true }));
+                inputValor.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            await sleep(1500);
+            const butAplica = document.querySelector('#butAplica'); if (butAplica) butAplica.click(); await sleep(1800);
+            const butVoltar = document.querySelector('#butVoltar'); if (butVoltar) butVoltar.click(); await sleep(1200);
+            const vdPessoas = document.querySelector('#vd_pessoas');
+            if (vdPessoas) {
+                vdPessoas.value = '0';
+                Array.from(vdPessoas.options).forEach(opt => opt.selected = false);
+                const optionZero = vdPessoas.querySelector('option[value="0"]');
+                if (optionZero) optionZero.selected = true;
+                vdPessoas.dispatchEvent(new Event('change', { bubbles: true }));
+                vdPessoas.dispatchEvent(new Event('input', { bubbles: true }));
+                if (window.vendaView && window.vendaView.pessoas) window.vendaView.pessoas('0');
+            }
+            await sleep(1000);
+            const butSomenteFecha = document.querySelector('#butSomenteFecha'); if (butSomenteFecha) butSomenteFecha.click();
+            await sleep(1000); atualizarPainelPrincipal();
+        } catch (e) { console.error("ERRO:", e); }
+    }
+
+    // --- Automação 2: Adicionar PG ---
+    async function adicionarPG() {
+        try {
+            const butMenu = document.querySelector('#butMenu'); if (butMenu) butMenu.click(); await sleep(400);
+            const butInfo = document.querySelector('#butInfo'); if (butInfo) butInfo.click(); await sleep(800);
+            const inputComanda = document.querySelector('#vd_mesadesc');
+            if (inputComanda) {
+                let valorAtual = inputComanda.value.trim();
+                if (!valorAtual.toUpperCase().startsWith('PG')) {
+                    inputComanda.value = valorAtual ? 'PG ' + valorAtual : 'PG';
+                    inputComanda.dispatchEvent(new Event('input', { bubbles: true }));
+                    inputComanda.dispatchEvent(new Event('change', { bubbles: true }));
+                    inputComanda.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+                    if (window.index && window.index.renewPanelDireita) window.index.renewPanelDireita();
+                }
+            }
+            await sleep(800);
+            const butSave = document.querySelector('#butSave'); if (butSave) butSave.click();
+            await sleep(1500);
+            const butVoltar = document.querySelector('#butVoltar'); if (butVoltar) butVoltar.click();
+            await sleep(500);
+            atualizarPainelPrincipal();
+        } catch (e) { console.error("ERRO NO ADICIONAR PG:", e); }
+    }
+
+    // --- Automação 3: Zerar Pessoas ---
+    async function zerarPessoas() {
+        try {
+            const vdPessoas = document.querySelector('#vd_pessoas');
+            if (vdPessoas) {
+                vdPessoas.value = '0';
+                Array.from(vdPessoas.options).forEach(opt => opt.selected = false);
+                const optionZero = vdPessoas.querySelector('option[value="0"]');
+                if (optionZero) optionZero.selected = true;
+                vdPessoas.dispatchEvent(new Event('change', { bubbles: true }));
+                vdPessoas.dispatchEvent(new Event('input', { bubbles: true }));
+                if (window.vendaView && window.vendaView.pessoas) window.vendaView.pessoas('0');
+            }
+            await sleep(800);
+            atualizarPainelPrincipal();
+        } catch (e) { console.error("ERRO NO ZERAR PESSOAS:", e); }
+    }
+
+    // Criação dos Botões de Automação Flutuantes
+    function criarBotoes() {
+        if (!usuarioAutorizado() || document.getElementById('container-botoes-contahub')) return;
+        const container = document.createElement('div');
+        container.id = 'container-botoes-contahub';
+        container.style.position = 'fixed'; container.style.bottom = '20px'; container.style.right = '20px'; container.style.zIndex = '99998'; container.style.display = 'flex'; container.style.gap = '10px';
+        
+        const btnZero = document.createElement('button'); btnZero.innerText = '0'; btnZero.style.background = '#64B5F6'; btnZero.style.color = '#fff'; btnZero.style.border = 'none'; btnZero.style.padding = '14px 18px'; btnZero.style.borderRadius = '12px'; btnZero.style.fontWeight = 'bold'; btnZero.style.cursor = 'pointer'; btnZero.onclick = zerarPessoas;
+        const btnPG = document.createElement('button'); btnPG.innerText = 'PG'; btnPG.style.background = '#81C784'; btnPG.style.color = '#fff'; btnPG.style.border = 'none'; btnPG.style.padding = '14px 18px'; btnPG.style.borderRadius = '12px'; btnPG.style.fontWeight = 'bold'; btnPG.style.cursor = 'pointer'; btnPG.onclick = adicionarPG;
+        const btnDesc = document.createElement('button'); btnDesc.innerText = '100%'; btnDesc.style.background = '#ffc0a5'; btnDesc.style.color = '#333'; btnDesc.style.border = 'none'; btnDesc.style.padding = '14px 18px'; btnDesc.style.borderRadius = '12px'; btnDesc.style.fontWeight = 'bold'; btnDesc.style.cursor = 'pointer'; btnDesc.onclick = function() {
+            if (document.getElementById('caixa-confirmacao-100')) return;
+            const confirmBox = document.createElement('div'); confirmBox.id = 'caixa-confirmacao-100'; confirmBox.style.position = 'fixed'; confirmBox.style.bottom = '80px'; confirmBox.style.right = container.style.right; confirmBox.style.zIndex = '999999'; confirmBox.style.background = '#ffffff'; confirmBox.style.border = '1px solid #ccc'; confirmBox.style.padding = '15px'; confirmBox.style.borderRadius = '8px'; confirmBox.innerHTML = `<p style="margin:0 0 15px; font-size:14px; color:#333; font-weight:bold;">Aplicar 100% e fechar?</p><button id="btn-confirma-sim" style="background:#4CAF50; color:white; border:none; padding:8px 15px; cursor:pointer; margin-right:10px;">SIM</button><button id="btn-confirma-nao" style="background:#f44336; color:white; border:none; padding:8px 15px; cursor:pointer;">NÃO</button>`; document.body.appendChild(confirmBox);
+            document.getElementById('btn-confirma-sim').onclick = function() { confirmBox.remove(); aplicarDesconto100(); };
+            document.getElementById('btn-confirma-nao').onclick = function() { confirmBox.remove(); };
+        };
+        container.append(btnZero, btnPG, btnDesc); document.body.appendChild(container);
+    }
+
+    // --- Módulo Ambiente & Atalhos de Menu ---
+    const meusAtalhos = [
+        { nome: 'Vendas', url: 'https://sp.contahub.com/#vendas', executar: () => { window.menu.menu_0(0); } },
+        { nome: 'Turnos', url: 'https://sp.contahub.com/#gerencia.resumoTurnos', executar: () => { window.menu.menu_1(1, 0); } },
+        { nome: 'Entrada_NF', url: 'https://sp.contahub.com/#estoque.receb', executar: () => { window.menu.menu_1(4, 1); } }
+    ];
+
+    const limparNomeEmpresa = () => {
+        const divCabecalho = document.getElementById('divCabecalho');
+        if (divCabecalho) {
+            divCabecalho.childNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE && node.nodeValue.includes('@Shot Rock Bar')) {
+                    node.nodeValue = node.nodeValue.replace('@Shot Rock Bar', '').trim();
+                }
+            });
+        }
+    };
+
+    const aplicarLayoutAmbiente = (ambiente) => {
+        if (ambiente === ambienteLocal) return;
+        ambienteLocal = ambiente;
+
+        const header = document.getElementById('mainHeader');
+        const btn = document.getElementById('btn-toggle-ambiente');
+
+        if (ambiente == "1") { // PRODUÇÃO
+            if (header) {
+                header.style.setProperty('background-image', "url('img/fundo-header-neon-azul.jpg')", 'important');
+                header.style.backgroundColor = "";
+            }
+            if (btn) {
+                btn.innerText = "PRODUÇÃO";
+                btn.style.color = "#287aed";
+                btn.style.background = "#264b96";
+                btn.style.borderColor = "#287aed";
+                btn.style.boxShadow = "none";
+            }
+        } else { // HOMOLOGAÇÃO
+            if (header) {
+                header.style.setProperty('background-image', 'none', 'important');
+                header.style.setProperty('background-color', '#ff0000', 'important');
+            }
+            if (btn) {
+                btn.innerText = "HOMOLOGAÇÃO";
+                btn.style.background = "#ffc107";
+                btn.style.color = "#000000";
+            }
+        }
+    };
+
+    const sincronizarVisual = async () => {
+        if (!window.contahub?.u) return;
+        try {
+            const res = await fetch(`https://sp.contahub.com/rest/contahub.cmds.ConfigCmd/getConfigEmpresa/${Date.now()}?emp=${window.contahub.u.emp}&nfe=1`);
+            if (res.ok) {
+                const dados = await res.json();
+                window.contahub.u.nfe_ambiente = dados.nfe_ambiente;
+                aplicarLayoutAmbiente(dados.nfe_ambiente);
+            }
+        } catch (e) {}
+    };
+
+    const salvarNoServidor = async (novoAmbiente) => {
+        const u = window.contahub.u;
+        const urlBase = `https://sp.contahub.com/rest/contahub.cmds.ConfigCmd`;
+        try {
+            const res = await fetch(`${urlBase}/getConfigEmpresa/${Date.now()}?emp=${u.emp}&nfe=1`);
+            const dados = await res.json();
+            dados.nfe_ambiente = novoAmbiente;
+
+            const bodyEncoded = new URLSearchParams(dados).toString();
+            const saveRes = await fetch(`${urlBase}/setConfigEmpresa/${Date.now()}?emp=${u.emp}&nfe=1`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: bodyEncoded
+            });
+
+            if (saveRes.ok) {
+                window.contahub.u.nfe_ambiente = novoAmbiente;
+                aplicarLayoutAmbiente(novoAmbiente);
+            }
+        } catch (e) { console.error("Erro ao salvar", e); }
+    };
+
+    const criarAtalhos = () => {
+        if (document.getElementById('container-meus-atalhos')) return;
+        const container = document.createElement('div');
+        container.id = 'container-meus-atalhos';
+        container.style = "position: fixed; top: 9px; left: 130px; z-index: 10000; display: flex; gap: 8px;";
+
+        meusAtalhos.forEach(atalho => {
+            const link = document.createElement('a');
+            link.innerText = atalho.nome;
+            link.href = atalho.url;
+            link.style = "color: lightblue; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); padding: 4px 12px; border-radius: 15px; font-family: Arial, Helvetica, sans-serif; font-size: 11px; text-decoration: none; font-weight: normal; text-shadow: none; transition: background 0.2s; cursor: pointer; display: flex; align-items: center;";
+
+            link.onmouseover = () => link.style.background = "rgba(255,255,255,0.3)";
+            link.onmouseout = () => link.style.background = "rgba(255,255,255,0.15)";
+
+            link.addEventListener('click', (e) => {
+                if (e.button === 0 && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof atalho.executar === 'function') {
+                        atalho.executar();
+                    }
+                }
+            });
+            container.appendChild(link);
+        });
+        document.body.appendChild(container);
+    };
+
+    const iniciarAmbiente = () => {
+        const u = window.contahub.u;
+        if (!u) return;
+
+        if (donosAutorizados.includes(u.usr_email) && !document.getElementById('btn-toggle-ambiente')) {
+            const container = document.createElement('div');
+            container.style = "position: fixed; top: 7px; left: 50%; transform: translateX(-50%); z-index: 10000;";
+
+            const btn = document.createElement('button');
+            btn.id = 'btn-toggle-ambiente';
+            btn.style = "color: white; border: 1px solid white; padding: 4px 12px; cursor: pointer; border-radius: 15px; font-weight: bold; font-size: 10px; text-shadow: none;";
+
+            btn.onclick = () => {
+                const novo = (ambienteLocal == "1") ? "2" : "1";
+                btn.innerText = "Salvando...";
+                salvarNoServidor(novo);
+            };
+
+            container.appendChild(btn);
+            document.body.appendChild(container);
+        }
+
+        limparNomeEmpresa();
+        criarAtalhos();
+        sincronizarVisual();
+    };
+
+    const init = setInterval(function () {
+        if (document.body && window.contahub && window.contahub.u && window.contahub.u.usr_email) {
+            if (usuarioAutorizado()) {
+                criarBotoes();
+                iniciarAmbiente();
+                setInterval(gerenciarLayoutPainel, 300);
+                setInterval(() => {
+                    if (!document.hidden) sincronizarVisual();
+                    limparNomeEmpresa();
+                }, 10000);
+            }
+            clearInterval(init);
+        }
+    }, 1000);
+
+})();
