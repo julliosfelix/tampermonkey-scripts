@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         ContaHub - Painel Fixo com Escudo, Botões de Zerar Pessoas, Alterar Nome PG, Desconto 100%
+// @name         ContaHub/ContaHub - Painel Fixo com Escudo, Botões de Zerar Pessoas, Alterar Nome PG, Desconto 100%
 // @namespace    http://tampermonkey.net/
 // @version      3.1
 // @description  Painel fixo funcional, botões de automação, ambiente, atalhos e navegação de turnos (Sem escudo/travamento)
