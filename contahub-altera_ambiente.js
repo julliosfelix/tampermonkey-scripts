@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         ContaHub - Ambiente (Sincronia Imediata)
+// @name         ContaHub/ContaHub - Ambiente (Sincronia Imediata)
 // @match        https://sp.contahub.com/*
 // @grant        none
 // ==/UserScript==
