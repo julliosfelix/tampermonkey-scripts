@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         ContaHub - Grid, Atalhos, Ambiente Prod/Hom, Navega Turno, Macro Conta
+// @name         ContaHub/Hom, Navega Turno, Macro Conta
 // @namespace    http://tampermonkey.net/
 // @version      3.5
 // @description  Automações, botões flutuantes (apenas em Vendas), atalhos, turnos e Grid Lançamento Garçom integrado (100% nativo)
