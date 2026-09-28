@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         ContaHub - Painel Fixo com Escudo, Botões de Zerar Pessoas, Alterar Nome PG, Desconto 100%
+// @name         ContaHub/ContaHub - Painel Fixo com Escudo, Botões de Zerar Pessoas, Alterar Nome PG, Desconto 100%
 // @namespace    http://tampermonkey.net/
 // @version      2.16
 // @description  Barra de pesquisa liberada mesmo com escudo ativo
